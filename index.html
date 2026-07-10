@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AI Runner : Escape from Virus</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- 메인 메뉴 -->
+    <div id="screen-menu" class="screen active">
+      <div class="menu-bg"></div>
+      <h1 class="game-title">AI Runner</h1>
+      <p class="game-subtitle">Escape from Virus</p>
+      <div class="menu-buttons">
+        <button class="btn btn-primary" id="btn-start">▶ 게임 시작</button>
+        <button class="btn btn-secondary" id="btn-howto">조작법</button>
+      </div>
+      <p class="high-score-label">최고 기록: <span id="menu-high-score">0</span></p>
+    </div>
+
+    <!-- 캐릭터 선택 -->
+    <div id="screen-select" class="screen">
+      <h2>캐릭터 선택</h2>
+      <div class="character-cards">
+        <div class="char-card selected" data-char="ppiya">
+          <canvas class="char-preview-canvas" width="140" height="140"></canvas>
+          <h3>삐야</h3>
+          <p>노란 AI 병아리</p>
+          <span class="char-desc">귀엽고 가벼운 느낌</span>
+        </div>
+        <div class="char-card" data-char="oru">
+          <canvas class="char-preview-canvas" width="140" height="140"></canvas>
+          <h3>오르</h3>
+          <p>AI 흰 곰</p>
+          <span class="char-desc">든든하고 안정적인 느낌</span>
+        </div>
+      </div>
+      <div class="select-buttons">
+        <button class="btn btn-secondary" id="btn-back-menu">← 메인으로</button>
+        <button class="btn btn-primary" id="btn-play">▶ 선택 완료</button>
+      </div>
+    </div>
+
+    <!-- 조작법 -->
+    <div id="screen-howto" class="screen">
+      <h2>조작법</h2>
+      <div class="howto-content">
+        <div class="howto-item"><kbd>←</kbd> <kbd>→</kbd> 또는 <kbd>A</kbd> <kbd>D</kbd> — 레인 이동</div>
+        <div class="howto-item"><kbd>Space</kbd> 또는 <kbd>↑</kbd> — 점프</div>
+        <div class="howto-item"><kbd>↓</kbd> — 슬라이딩 (낮은 장애물 회피)</div>
+        <div class="howto-item">모바일 — 좌우/상하 스와이프</div>
+        <hr>
+        <div class="howto-item">🦠 바이러스 충돌 → ❤️ -1 (무적 1초)</div>
+        <div class="howto-item">💉 백신 획득 → ❤️ +1 (최대 5)</div>
+        <div class="howto-item">💾 데이터 칩 (하늘색) → +50점</div>
+      </div>
+      <button class="btn btn-primary" id="btn-howto-back">확인</button>
+    </div>
+
+    <!-- 게임 화면 -->
+    <div id="screen-game" class="screen">
+      <canvas id="game-canvas"></canvas>
+      <div id="hud">
+        <div class="hud-row">
+          <span class="hud-label">점수</span>
+          <span id="hud-score">0</span>
+        </div>
+        <div class="hud-row">
+          <span class="hud-label">거리</span>
+          <span id="hud-distance">0m</span>
+        </div>
+        <div class="hud-row lives" id="hud-lives"></div>
+        <div class="hud-row combo" id="hud-combo"></div>
+      </div>
+    </div>
+
+    <!-- 게임 오버 -->
+    <div id="screen-over" class="screen">
+      <h2 class="over-title">Game Over</h2>
+      <div class="over-stats">
+        <p>점수: <span id="over-score">0</span></p>
+        <p>거리: <span id="over-distance">0</span>m</p>
+        <p class="over-best">최고 기록: <span id="over-high-score">0</span></p>
+      </div>
+      <div class="over-buttons">
+        <button class="btn btn-primary" id="btn-retry">다시 하기</button>
+        <button class="btn btn-secondary" id="btn-over-menu">메인으로</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="audio.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>

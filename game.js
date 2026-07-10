@@ -1,0 +1,721 @@
+// ==========================================
+// AI Runner : Escape from Virus
+// HTML Canvas 기반 3레인 무한 러닝 게임
+// ==========================================
+
+const LANES = 3;
+const MAX_LIVES = 5;
+const INVINCIBLE_MS = 1000;
+const JUMP_DURATION = 500;
+const SLIDE_DURATION = 450;
+const HEAL_DURATION = 800;
+const HEAL_FRAME_MS = 200;
+const RUN_FRAME_MS = 100;
+const HIT_FRAME_MS = 120;
+
+// 화면 전환
+const screens = {
+  menu: document.getElementById('screen-menu'),
+  select: document.getElementById('screen-select'),
+  howto: document.getElementById('screen-howto'),
+  game: document.getElementById('screen-game'),
+  over: document.getElementById('screen-over'),
+};
+
+function showScreen(name) {
+  Object.values(screens).forEach(s => s.classList.remove('active'));
+  screens[name].classList.add('active');
+  AudioManager.forScreen(name);
+}
+
+function unlockAudio() {
+  AudioManager.unlock();
+  AudioManager.forScreen(screens.menu.classList.contains('active') ? 'menu' : 'select');
+}
+
+// 캐릭터 선택
+let selectedChar = 'ppiya';
+const charCards = document.querySelectorAll('.char-card');
+charCards.forEach(card => {
+  card.addEventListener('click', () => {
+    charCards.forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    selectedChar = card.dataset.char;
+  });
+});
+
+// 버튼 이벤트
+document.getElementById('btn-start').addEventListener('click', () => {
+  unlockAudio();
+  showScreen('select');
+  startSelectPreview();
+});
+document.getElementById('btn-howto').addEventListener('click', () => {
+  unlockAudio();
+  showScreen('howto');
+});
+document.getElementById('btn-howto-back').addEventListener('click', () => showScreen('menu'));
+document.getElementById('btn-back-menu').addEventListener('click', () => {
+  stopSelectPreview();
+  showScreen('menu');
+});
+document.getElementById('btn-play').addEventListener('click', () => {
+  unlockAudio();
+  stopSelectPreview();
+  startGame();
+});
+document.getElementById('btn-retry').addEventListener('click', () => {
+  unlockAudio();
+  startGame();
+});
+document.getElementById('btn-over-menu').addEventListener('click', () => {
+  updateMenuHighScore();
+  showScreen('menu');
+});
+
+// 최고 점수
+function getHighScore() {
+  return parseInt(localStorage.getItem('aiRunnerHighScore') || '0', 10);
+}
+function setHighScore(score) {
+  localStorage.setItem('aiRunnerHighScore', String(score));
+}
+function updateMenuHighScore() {
+  document.getElementById('menu-high-score').textContent = getHighScore();
+}
+updateMenuHighScore();
+
+// 스프라이트 로드
+const SPRITE_DEF = {
+  ppiya: { run: 5, heal: 4, hit: 4 },
+  oru:   { run: 5, heal: 4, hit: 4 },
+};
+
+const sprites = { ppiya: { front: null, run: [], heal: [], hit: [] }, oru: { front: null, run: [], heal: [], hit: [] } };
+let spritesReady = false;
+
+function loadSprites() {
+  const promises = [];
+  for (const char of ['ppiya', 'oru']) {
+    const base = `assets/sprites/${char}`;
+    sprites[char].front = loadImage(`${base}/front.png`);
+    promises.push(sprites[char].front);
+    for (const type of ['run', 'heal', 'hit']) {
+      sprites[char][type] = [];
+      for (let i = 0; i < SPRITE_DEF[char][type]; i++) {
+        const img = loadImage(`${base}/${type}/${type}_${i}.png`);
+        sprites[char][type].push(img);
+        promises.push(img);
+      }
+    }
+  }
+  return Promise.all(promises.map(img => new Promise(res => {
+    if (img.complete) res();
+    else { img.onload = res; img.onerror = res; }
+  }))).then(() => { spritesReady = true; });
+}
+
+function loadImage(src) {
+  const img = new Image();
+  img.src = src;
+  return img;
+}
+
+loadSprites().then(() => startSelectPreview());
+
+// 공통 스프라이트 그리기
+function drawSprite(targetCtx, img, cx, cy, height, bobY = 0, alpha = 1) {
+  if (!img || !img.complete || !img.naturalWidth) return;
+  const aspect = img.width / img.height;
+  const drawH = height;
+  const drawW = height * aspect;
+  const x = cx - drawW / 2;
+  const y = cy - drawH / 2 + bobY;
+
+  targetCtx.save();
+  targetCtx.globalAlpha = alpha;
+  targetCtx.drawImage(img, x, y, drawW, drawH);
+  targetCtx.restore();
+}
+
+// ── 캐릭터 선택 화면 애니메이션 ──
+let selectAnimId = null;
+
+function getSelectAnim(isSelected, timestamp) {
+  const bob = Math.sin(timestamp / 400) * (isSelected ? 5 : 3);
+  return { set: 'front', frame: 0, bob };
+}
+
+function drawSelectPreview(timestamp) {
+  if (!spritesReady || !screens.select.classList.contains('active')) return;
+
+  charCards.forEach(card => {
+    const char = card.dataset.char;
+    const canvas = card.querySelector('.char-preview-canvas');
+    if (!canvas) return;
+
+    const cctx = canvas.getContext('2d');
+    const isSelected = card.classList.contains('selected');
+    const { bob } = getSelectAnim(isSelected, timestamp);
+
+    cctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawSprite(cctx, sprites[char].front, canvas.width / 2, canvas.height * 0.62, canvas.height * 0.72, bob);
+  });
+
+  selectAnimId = requestAnimationFrame(drawSelectPreview);
+}
+
+function startSelectPreview() {
+  if (selectAnimId) cancelAnimationFrame(selectAnimId);
+  if (spritesReady) selectAnimId = requestAnimationFrame(drawSelectPreview);
+}
+
+function stopSelectPreview() {
+  if (selectAnimId) {
+    cancelAnimationFrame(selectAnimId);
+    selectAnimId = null;
+  }
+}
+
+// Canvas
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const container = document.getElementById('game-container');
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+
+// 게임 상태
+let gameState = null;
+let animId = null;
+let lastTime = 0;
+
+// 장애물/아이템 타입
+const TYPES = {
+  VIRUS: 'virus',
+  TALL_VIRUS: 'tall_virus',
+  FLOAT_VIRUS: 'float_virus',
+  VACCINE: 'vaccine',
+  DATA: 'data',
+};
+
+function createGameState() {
+  return {
+    lane: 1,
+    lives: MAX_LIVES,
+    score: 0,
+    distance: 0,
+    combo: 0,
+    speed: 280,
+    invincibleUntil: 0,
+    jumping: false,
+    jumpStart: 0,
+    sliding: false,
+    slideStart: 0,
+    entities: [],
+    popups: [],
+    spawnTimer: 0,
+    spawnInterval: 1.2,
+    phase: 1,
+    char: selectedChar,
+    running: true,
+    healAnimStart: 0,
+    healAnimUntil: 0,
+    hitAnimStart: 0,
+  };
+}
+
+function startGame() {
+  if (animId) cancelAnimationFrame(animId);
+  resizeCanvas();
+  gameState = createGameState();
+  lastTime = performance.now();
+  showScreen('game');
+  updateHUD();
+  animId = requestAnimationFrame(gameLoop);
+}
+
+// 입력
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) {
+    e.preventDefault();
+  }
+  handleInput(e.code);
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+function handleInput(code) {
+  if (!gameState || !gameState.running) return;
+  const gs = gameState;
+
+  if ((code === 'ArrowLeft' || code === 'KeyA') && gs.lane > 0) {
+    gs.lane--;
+  }
+  if ((code === 'ArrowRight' || code === 'KeyD') && gs.lane < LANES - 1) {
+    gs.lane++;
+  }
+  if ((code === 'Space' || code === 'ArrowUp') && !gs.jumping && !gs.sliding) {
+    gs.jumping = true;
+    gs.jumpStart = performance.now();
+  }
+  if (code === 'ArrowDown' && !gs.sliding && !gs.jumping) {
+    gs.sliding = true;
+    gs.slideStart = performance.now();
+  }
+}
+
+// 터치 스와이프
+let touchStartX = 0;
+let touchStartY = 0;
+canvas.addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+canvas.addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  const threshold = 30;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    if (dx < -threshold) handleInput('ArrowLeft');
+    if (dx > threshold) handleInput('ArrowRight');
+  } else {
+    if (dy < -threshold) handleInput('Space');
+    if (dy > threshold) handleInput('ArrowDown');
+  }
+}, { passive: true });
+
+// 스폰
+function spawnEntity(gs) {
+  const lane = Math.floor(Math.random() * LANES);
+  const roll = Math.random();
+
+  let type;
+  if (roll < 0.45) {
+    type = TYPES.VIRUS;
+  } else if (roll < 0.58) {
+    type = TYPES.TALL_VIRUS;
+  } else if (roll < 0.65 && gs.phase >= 2) {
+    type = TYPES.FLOAT_VIRUS;
+  } else if (roll < 0.78) {
+    type = TYPES.VACCINE;
+  } else {
+    type = TYPES.DATA;
+  }
+
+  // 같은 레인에 겹치지 않도록
+  const tooClose = gs.entities.some(
+    ent => ent.lane === lane && ent.y < 120
+  );
+  if (tooClose && type !== TYPES.DATA) return;
+
+  gs.entities.push({ type, lane, y: -60, collected: false });
+}
+
+// 충돌 판정
+function getCharacterBounds(gs, laneW, playerY) {
+  const size = laneW * 0.78;
+  const jumpProgress = gs.jumping
+    ? Math.min(1, (performance.now() - gs.jumpStart) / JUMP_DURATION)
+    : 0;
+  const jumpHeight = Math.sin(jumpProgress * Math.PI) * 80;
+  const slideOffset = gs.sliding ? 22 : 0;
+  const drawH = gs.sliding ? size * 0.55 : size;
+  const cx = gs.lane * laneW + laneW / 2;
+  const cy = playerY - drawH / 2 + 8 - jumpHeight + slideOffset;
+
+  return {
+    x: cx - drawH * 0.35,
+    y: cy - drawH / 2,
+    w: drawH * 0.7,
+    h: drawH,
+  };
+}
+
+function getEntityHitbox(ent, laneW, playerY) {
+  const x = ent.lane * laneW + laneW * 0.25;
+  const w = laneW * 0.5;
+
+  switch (ent.type) {
+    case TYPES.TALL_VIRUS:
+      return { x: x + 4, y: ent.y, w: w - 8, h: 65 };
+    case TYPES.FLOAT_VIRUS:
+      return { x, y: playerY - 50, w, h: 35 };
+    case TYPES.VACCINE:
+      return { x: x - 4, y: ent.y, w: w + 8, h: 55 };
+    case TYPES.DATA:
+      return { x: x - 6, y: ent.y, w: w + 12, h: 48 };
+    default:
+      return { x, y: ent.y, w, h: 50 };
+  }
+}
+
+function getPlayerHitbox(gs, laneW, playerY) {
+  return getCharacterBounds(gs, laneW, playerY);
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x &&
+         a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function checkCollisions(gs, laneW, playerY) {
+  const now = performance.now();
+  const player = getPlayerHitbox(gs, laneW, playerY);
+
+  for (const ent of gs.entities) {
+    if (ent.collected || ent.lane !== gs.lane) continue;
+
+    const entBox = getEntityHitbox(ent, laneW, playerY);
+    const isCollectible = ent.type === TYPES.DATA || ent.type === TYPES.VACCINE;
+    const overlapping = rectsOverlap(player, entBox);
+    const nearPlayer = isCollectible &&
+      Math.abs((entBox.y + entBox.h / 2) - (player.y + player.h / 2)) < 45;
+
+    if (!overlapping && !nearPlayer) continue;
+
+    if (ent.type === TYPES.VIRUS || ent.type === TYPES.TALL_VIRUS || ent.type === TYPES.FLOAT_VIRUS) {
+      if (ent.type === TYPES.TALL_VIRUS && gs.jumping) continue;
+      if (ent.type === TYPES.FLOAT_VIRUS && gs.sliding) continue;
+      if (now < gs.invincibleUntil) continue;
+
+      gs.lives--;
+      gs.combo = 0;
+      gs.hitAnimStart = now;
+      gs.invincibleUntil = now + INVINCIBLE_MS;
+      gs.healAnimUntil = 0;
+      ent.collected = true;
+      AudioManager.playSfx('sfxHit');
+
+      if (gs.lives <= 0) {
+        gs.running = false;
+        endGame();
+      }
+    } else if (ent.type === TYPES.VACCINE) {
+      if (gs.lives < MAX_LIVES) gs.lives++;
+      ent.collected = true;
+      gs.combo++;
+      gs.healAnimStart = now;
+      gs.healAnimUntil = now + HEAL_DURATION;
+      AudioManager.playSfx('sfxHeal');
+    } else if (ent.type === TYPES.DATA) {
+      const bonus = 50 + gs.combo * 10;
+      gs.score += bonus;
+      ent.collected = true;
+      gs.combo++;
+      gs.popups.push({
+        text: `+${bonus}`,
+        x: gs.lane * laneW + laneW / 2,
+        y: playerY - 60,
+        life: 1.0,
+      });
+      AudioManager.playSfx('sfxData');
+    }
+  }
+}
+
+function endGame() {
+  cancelAnimationFrame(animId);
+  animId = null;
+
+  const finalScore = Math.floor(gameState.score);
+  const high = getHighScore();
+  if (finalScore > high) setHighScore(finalScore);
+
+  document.getElementById('over-score').textContent = finalScore;
+  document.getElementById('over-distance').textContent = Math.floor(gameState.distance);
+  document.getElementById('over-high-score').textContent = getHighScore();
+  showScreen('over');
+}
+
+// HUD
+function updateHUD() {
+  if (!gameState) return;
+  document.getElementById('hud-score').textContent = Math.floor(gameState.score);
+  document.getElementById('hud-distance').textContent = Math.floor(gameState.distance) + 'm';
+
+  const hearts = [];
+  for (let i = 0; i < MAX_LIVES; i++) {
+    hearts.push(i < gameState.lives ? '❤️' : '♡');
+  }
+  document.getElementById('hud-lives').textContent = hearts.join('');
+
+  const comboEl = document.getElementById('hud-combo');
+  comboEl.textContent = gameState.combo >= 2 ? `Combo x${gameState.combo}!` : '';
+}
+
+// 렌더링
+function drawBackground(w, h, offset) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#0a1020');
+  grad.addColorStop(0.5, '#12082a');
+  grad.addColorStop(1, '#081828');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // 데이터 스트림 (양옆)
+  ctx.fillStyle = 'rgba(0, 200, 255, 0.06)';
+  ctx.fillRect(0, 0, w * 0.08, h);
+  ctx.fillRect(w * 0.92, 0, w * 0.08, h);
+
+  // 레인 구분선
+  const laneW = w / LANES;
+  ctx.strokeStyle = 'rgba(0, 200, 255, 0.15)';
+  ctx.lineWidth = 2;
+  for (let i = 1; i < LANES; i++) {
+    const x = i * laneW;
+    ctx.beginPath();
+    ctx.setLineDash([12, 18]);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  // 회로판 바닥 격자
+  const gridOffset = offset % 60;
+  ctx.strokeStyle = 'rgba(0, 180, 255, 0.08)';
+  ctx.lineWidth = 1;
+  for (let y = gridOffset; y < h; y += 60) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+  for (let i = 0; i <= LANES; i++) {
+    const x = i * laneW;
+    for (let y = gridOffset; y < h; y += 60) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + laneW, y + 30);
+      ctx.stroke();
+    }
+  }
+}
+
+function getAnimFrame(gs, timestamp) {
+  // 1. 장애물 충돌 (무적 시간)
+  if (timestamp < gs.invincibleUntil) {
+    const elapsed = timestamp - gs.hitAnimStart;
+    const frame = Math.min(SPRITE_DEF[gs.char].hit - 1, Math.floor(elapsed / HIT_FRAME_MS));
+    return { set: 'hit', frame };
+  }
+
+  // 2. 회복 (백신 획득)
+  if (timestamp < gs.healAnimUntil) {
+    const elapsed = timestamp - gs.healAnimStart;
+    const frame = Math.min(SPRITE_DEF[gs.char].heal - 1, Math.floor(elapsed / HEAL_FRAME_MS));
+    return { set: 'heal', frame };
+  }
+
+  // 3. 달리기 (기본)
+  const speedFactor = gs.speed / 280;
+  const frameMs = Math.max(70, RUN_FRAME_MS / speedFactor);
+  const frame = Math.floor(timestamp / frameMs) % SPRITE_DEF[gs.char].run;
+  return { set: 'run', frame };
+}
+
+function drawCharacter(gs, laneW, playerY) {
+  if (!spritesReady) return;
+
+  const timestamp = performance.now();
+  const charSprites = sprites[gs.char];
+  const { set, frame } = getAnimFrame(gs, timestamp);
+  const img = set === 'front'
+    ? charSprites.front
+    : charSprites[set][frame];
+
+  if (!img || !img.complete) return;
+
+  const size = laneW * 0.78;
+  const jumpProgress = gs.jumping
+    ? Math.min(1, (timestamp - gs.jumpStart) / JUMP_DURATION)
+    : 0;
+  const jumpHeight = Math.sin(jumpProgress * Math.PI) * 80;
+  const slideOffset = gs.sliding ? 22 : 0;
+  const drawH = gs.sliding ? size * 0.55 : size;
+
+  const cx = gs.lane * laneW + laneW / 2;
+  const cy = playerY - drawH / 2 + 8 - jumpHeight + slideOffset;
+
+  let alpha = 1;
+  if (set === 'hit' && Math.floor(timestamp / 100) % 2 === 0) {
+    alpha = 0.55;
+  }
+
+  drawSprite(ctx, img, cx, cy, drawH, 0, alpha);
+}
+
+function drawEntity(ent, laneW, playerY) {
+  const x = ent.lane * laneW + laneW * 0.25;
+  const w = laneW * 0.5;
+
+  switch (ent.type) {
+    case TYPES.VIRUS: {
+      const y = ent.y;
+      ctx.fillStyle = '#ff2255';
+      ctx.shadowColor = '#ff0044';
+      ctx.shadowBlur = 12;
+      // 스파이크 바이러스
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y + 25, 22, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(x + w / 2 + Math.cos(angle) * 18, y + 25 + Math.sin(angle) * 18);
+        ctx.lineTo(x + w / 2 + Math.cos(angle) * 30, y + 25 + Math.sin(angle) * 30);
+        ctx.strokeStyle = '#ff4477';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+      break;
+    }
+    case TYPES.TALL_VIRUS: {
+      const y = ent.y;
+      ctx.fillStyle = '#cc0044';
+      ctx.shadowColor = '#ff0044';
+      ctx.shadowBlur = 15;
+      ctx.fillRect(x + 8, y, w - 16, 65);
+      ctx.beginPath();
+      ctx.arc(x + w / 2, y, 18, Math.PI, 0);
+      ctx.fill();
+      // 눈
+      ctx.fillStyle = '#ffff00';
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(x + w / 2 - 10, y + 20, 5, 0, Math.PI * 2);
+      ctx.arc(x + w / 2 + 10, y + 20, 5, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case TYPES.FLOAT_VIRUS: {
+      const y = playerY - 35;
+      ctx.fillStyle = '#aa22ff';
+      ctx.shadowColor = '#cc44ff';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.ellipse(x + w / 2, y + 15, 28, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      break;
+    }
+    case TYPES.VACCINE: {
+      const y = ent.y;
+      ctx.fillStyle = '#00ff88';
+      ctx.shadowColor = '#00ff88';
+      ctx.shadowBlur = 14;
+      // 십자가 백신
+      ctx.fillRect(x + w / 2 - 6, y + 5, 12, 35);
+      ctx.fillRect(x + w / 2 - 16, y + 14, 32, 12);
+      ctx.shadowBlur = 0;
+      // 라벨
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('💉', x + w / 2, y + 50);
+      break;
+    }
+    case TYPES.DATA: {
+      const y = ent.y;
+      ctx.fillStyle = '#00d4ff';
+      ctx.shadowColor = '#00d4ff';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(x + w / 2, y + 5);
+      ctx.lineTo(x + w - 5, y + 22);
+      ctx.lineTo(x + w - 5, y + 42);
+      ctx.lineTo(x + 5, y + 42);
+      ctx.lineTo(x + 5, y + 22);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('DATA', x + w / 2, y + 32);
+      ctx.font = 'bold 8px monospace';
+      ctx.fillStyle = '#003344';
+      ctx.fillText('+50', x + w / 2, y + 44);
+      break;
+    }
+  }
+}
+
+function drawPopups(gs) {
+  for (const p of gs.popups) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, p.life * 2);
+    ctx.fillStyle = '#00d4ff';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#00d4ff';
+    ctx.shadowBlur = 8;
+    ctx.fillText(p.text, p.x, p.y);
+    ctx.restore();
+  }
+}
+
+// 게임 루프
+function gameLoop(timestamp) {
+  if (!gameState || !gameState.running) return;
+
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+  const gs = gameState;
+
+  // 점프/슬라이드 종료
+  if (gs.jumping && timestamp - gs.jumpStart > JUMP_DURATION) gs.jumping = false;
+  if (gs.sliding && timestamp - gs.slideStart > SLIDE_DURATION) gs.sliding = false;
+
+  // 속도 & 난이도
+  gs.distance += gs.speed * dt * 0.01;
+  gs.score += gs.speed * dt * 0.01;
+  gs.speed = Math.min(600, 280 + gs.distance * 0.3);
+
+  if (gs.distance > 200) gs.phase = 2;
+  if (gs.distance > 500) gs.phase = 3;
+  if (gs.distance > 1000) gs.phase = 4;
+
+  gs.spawnInterval = Math.max(0.5, 1.2 - gs.phase * 0.15);
+  gs.spawnTimer += dt;
+  if (gs.spawnTimer >= gs.spawnInterval) {
+    gs.spawnTimer = 0;
+    spawnEntity(gs);
+    if (gs.phase >= 3 && Math.random() < 0.3) spawnEntity(gs);
+  }
+
+  // 엔티티 이동
+  const laneW = canvas.width / LANES;
+  const playerY = canvas.height - 120;
+
+  for (const ent of gs.entities) {
+    ent.y += gs.speed * dt;
+  }
+  gs.entities = gs.entities.filter(ent => ent.y < canvas.height + 80 && !ent.collected);
+
+  checkCollisions(gs, laneW, playerY);
+  updateHUD();
+
+  // 팝업 업데이트
+  gs.popups.forEach(p => { p.life -= dt; p.y -= 50 * dt; });
+  gs.popups = gs.popups.filter(p => p.life > 0);
+
+  // 그리기
+  const gridOffset = (timestamp * gs.speed * 0.05) % 60;
+  drawBackground(canvas.width, canvas.height, gridOffset);
+
+  for (const ent of gs.entities) {
+    drawEntity(ent, laneW, playerY);
+  }
+
+  drawCharacter(gs, laneW, playerY);
+  drawPopups(gs);
+
+  animId = requestAnimationFrame(gameLoop);
+}
