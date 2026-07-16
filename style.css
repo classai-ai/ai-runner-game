@@ -212,44 +212,217 @@ body {
   flex: 1;
 }
 
-/* 조작법 */
-#screen-howto h2 {
-  font-size: 1.5rem;
-  color: #00d4ff;
-  margin-bottom: 24px;
+/* 조작법 → 설정 화면으로 대체 */
+
+/* 설정 */
+#screen-settings {
+  justify-content: flex-start;
+  padding-top: 32px;
+  overflow-y: auto;
 }
 
-.howto-content {
+#screen-settings h2 {
+  font-size: 1.5rem;
+  color: #00d4ff;
+  margin-bottom: 20px;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 360px;
+  margin-bottom: 20px;
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid rgba(0, 180, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #a8d4e8;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.settings-tab.active {
+  background: rgba(0, 100, 180, 0.45);
+  border-color: #00d4ff;
+  color: #fff;
+}
+
+.settings-panel {
+  display: none;
+  width: 100%;
+  max-width: 360px;
   background: rgba(0, 20, 40, 0.7);
   border: 1px solid rgba(0, 180, 255, 0.2);
   border-radius: 12px;
   padding: 20px;
-  width: 100%;
-  max-width: 360px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
-.howto-item {
+.settings-panel.active {
+  display: block;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
   font-size: 0.9rem;
-  line-height: 2;
   color: #b8d8e8;
 }
 
-.howto-content hr {
-  border: none;
-  border-top: 1px solid rgba(0, 180, 255, 0.15);
-  margin: 12px 0;
+.setting-row:last-child {
+  margin-bottom: 0;
 }
 
-kbd {
+.setting-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  cursor: pointer;
+}
+
+.setting-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #00d4ff;
+  cursor: pointer;
+}
+
+.setting-row label[for] {
+  min-width: 90px;
+}
+
+.setting-row input[type="range"] {
+  flex: 1;
+  accent-color: #00d4ff;
+  cursor: pointer;
+}
+
+.setting-value {
+  min-width: 42px;
+  text-align: right;
+  color: #00d4ff;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.btn-test-sfx {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid rgba(0, 180, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(0, 80, 120, 0.3);
+  color: #a8d4e8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-test-sfx:hover {
+  background: rgba(0, 100, 150, 0.45);
+}
+
+.key-row {
+  flex-wrap: wrap;
+}
+
+.key-action {
+  flex: 1;
+  min-width: 80px;
+}
+
+.key-display {
   display: inline-block;
   background: rgba(0, 100, 150, 0.4);
   border: 1px solid rgba(0, 200, 255, 0.3);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 0.8rem;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.85rem;
   color: #00d4ff;
-  margin: 0 2px;
+  min-width: 80px;
+  text-align: center;
+}
+
+.btn-key-bind {
+  padding: 6px 14px;
+  border: 1px solid rgba(0, 180, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #a8d4e8;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-key-bind:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.btn-key-bind.listening {
+  border-color: #ff6bcb;
+  background: rgba(255, 107, 203, 0.15);
+  color: #ff6bcb;
+  animation: pulse-key 1s infinite;
+}
+
+@keyframes pulse-key {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.key-hint {
+  font-size: 0.75rem;
+  color: #4a7a94;
+  margin: 12px 0;
+  text-align: center;
+}
+
+.btn-reset-keys {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  font-size: 0.85rem;
+}
+
+#btn-settings-back {
+  width: 100%;
+  max-width: 360px;
+}
+
+/* 게임 화면 톱니바퀴 */
+.btn-settings-gear {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(0, 200, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(0, 15, 35, 0.75);
+  color: #00d4ff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+  pointer-events: auto;
+}
+
+.btn-settings-gear:hover {
+  background: rgba(0, 60, 100, 0.85);
+  transform: rotate(45deg);
 }
 
 /* 게임 화면 */

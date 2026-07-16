@@ -17,10 +17,13 @@ const HIT_FRAME_MS = 120;
 const screens = {
   menu: document.getElementById('screen-menu'),
   select: document.getElementById('screen-select'),
-  howto: document.getElementById('screen-howto'),
+  settings: document.getElementById('screen-settings'),
   game: document.getElementById('screen-game'),
   over: document.getElementById('screen-over'),
 };
+
+let settingsReturnTo = 'menu';
+let gamePausedForSettings = false;
 
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.remove('active'));
@@ -50,11 +53,15 @@ document.getElementById('btn-start').addEventListener('click', () => {
   showScreen('select');
   startSelectPreview();
 });
-document.getElementById('btn-howto').addEventListener('click', () => {
+document.getElementById('btn-settings-menu').addEventListener('click', () => {
   unlockAudio();
-  showScreen('howto');
+  openSettings('menu');
 });
-document.getElementById('btn-howto-back').addEventListener('click', () => showScreen('menu'));
+document.getElementById('btn-settings-game').addEventListener('click', () => {
+  pauseGameForSettings();
+  openSettings('game');
+});
+document.getElementById('btn-settings-back').addEventListener('click', () => closeSettings());
 document.getElementById('btn-back-menu').addEventListener('click', () => {
   stopSelectPreview();
   showScreen('menu');
@@ -84,6 +91,147 @@ function updateMenuHighScore() {
   document.getElementById('menu-high-score').textContent = getHighScore();
 }
 updateMenuHighScore();
+
+// ── 설정 UI ──
+let rebindingAction = null;
+
+function openSettings(returnTo) {
+  settingsReturnTo = returnTo;
+  syncSettingsUI();
+  showScreen('settings');
+}
+
+function closeSettings() {
+  cancelKeyRebind();
+  if (settingsReturnTo === 'game' && gamePausedForSettings) {
+    resumeGameFromSettings();
+  } else {
+    showScreen(settingsReturnTo);
+  }
+}
+
+function pauseGameForSettings() {
+  if (!gameState || !gameState.running) return;
+  gamePausedForSettings = true;
+  gameState.paused = true;
+  if (animId) {
+    cancelAnimationFrame(animId);
+    animId = null;
+  }
+}
+
+function resumeGameFromSettings() {
+  if (!gameState) return;
+  gameState.paused = false;
+  gamePausedForSettings = false;
+  showScreen('game');
+  lastTime = performance.now();
+  animId = requestAnimationFrame(gameLoop);
+}
+
+function syncSettingsUI() {
+  const s = SettingsManager.data;
+  document.getElementById('setting-bgm-enabled').checked = s.bgmEnabled;
+  document.getElementById('setting-sfx-enabled').checked = s.sfxEnabled;
+  document.getElementById('setting-bgm-volume').value = Math.round(s.bgmVolume * 100);
+  document.getElementById('setting-sfx-volume').value = Math.round(s.sfxVolume * 100);
+  document.getElementById('setting-bgm-value').textContent = Math.round(s.bgmVolume * 100) + '%';
+  document.getElementById('setting-sfx-value').textContent = Math.round(s.sfxVolume * 100) + '%';
+  updateKeyDisplays();
+}
+
+function updateKeyDisplays() {
+  for (const action of ['left', 'right', 'jump', 'slide']) {
+    const el = document.getElementById(`key-display-${action}`);
+    if (el) el.textContent = SettingsManager.formatKeys(SettingsManager.data.keys[action]);
+  }
+}
+
+function cancelKeyRebind() {
+  rebindingAction = null;
+  document.querySelectorAll('.btn-key-bind').forEach(btn => btn.classList.remove('listening'));
+  document.getElementById('key-bind-hint').textContent = '모바일: 좌우/상하 스와이프로 조작';
+}
+
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`panel-${tab.dataset.tab}`).classList.add('active');
+  });
+});
+
+document.getElementById('setting-bgm-enabled').addEventListener('change', e => {
+  SettingsManager.data.bgmEnabled = e.target.checked;
+  SettingsManager.save();
+  AudioManager.forScreen('settings');
+});
+
+document.getElementById('setting-sfx-enabled').addEventListener('change', e => {
+  SettingsManager.data.sfxEnabled = e.target.checked;
+  SettingsManager.save();
+});
+
+document.getElementById('setting-bgm-volume').addEventListener('input', e => {
+  const val = parseInt(e.target.value, 10);
+  SettingsManager.data.bgmVolume = val / 100;
+  document.getElementById('setting-bgm-value').textContent = val + '%';
+  SettingsManager.save();
+});
+
+document.getElementById('setting-sfx-volume').addEventListener('input', e => {
+  const val = parseInt(e.target.value, 10);
+  SettingsManager.data.sfxVolume = val / 100;
+  document.getElementById('setting-sfx-value').textContent = val + '%';
+  SettingsManager.save();
+});
+
+document.getElementById('btn-test-sfx').addEventListener('click', () => {
+  unlockAudio();
+  AudioManager.playSfx('sfxData');
+});
+
+document.getElementById('btn-reset-keys').addEventListener('click', () => {
+  SettingsManager.resetKeys();
+  updateKeyDisplays();
+});
+
+document.querySelectorAll('.btn-key-bind').forEach(btn => {
+  btn.addEventListener('click', () => {
+    cancelKeyRebind();
+    rebindingAction = btn.dataset.action;
+    btn.classList.add('listening');
+    document.getElementById('key-bind-hint').textContent = '새 키를 눌러주세요… (Esc: 취소)';
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (rebindingAction) {
+    e.preventDefault();
+    if (e.code === 'Escape') {
+      cancelKeyRebind();
+      return;
+    }
+    if (['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight'].includes(e.code)) {
+      return;
+    }
+    SettingsManager.data.keys[rebindingAction] = [e.code];
+    SettingsManager.save();
+    updateKeyDisplays();
+    cancelKeyRebind();
+    return;
+  }
+
+  keys[e.code] = true;
+  const preventCodes = SettingsManager.getPreventCodes();
+  if (preventCodes.includes(e.code)) {
+    e.preventDefault();
+  }
+  handleInput(e.code);
+});
+
+document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 // 스프라이트 로드
 const SPRITE_DEF = {
@@ -222,6 +370,7 @@ function createGameState() {
     phase: 1,
     char: selectedChar,
     running: true,
+    paused: false,
     healAnimStart: 0,
     healAnimUntil: 0,
     hitAnimStart: 0,
@@ -232,6 +381,7 @@ function startGame() {
   if (animId) cancelAnimationFrame(animId);
   resizeCanvas();
   gameState = createGameState();
+  gamePausedForSettings = false;
   lastTime = performance.now();
   showScreen('game');
   updateHUD();
@@ -240,30 +390,22 @@ function startGame() {
 
 // 입력
 const keys = {};
-document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space'].includes(e.code)) {
-    e.preventDefault();
-  }
-  handleInput(e.code);
-});
-document.addEventListener('keyup', e => { keys[e.code] = false; });
 
 function handleInput(code) {
-  if (!gameState || !gameState.running) return;
+  if (!gameState || !gameState.running || gameState.paused) return;
   const gs = gameState;
 
-  if ((code === 'ArrowLeft' || code === 'KeyA') && gs.lane > 0) {
+  if (SettingsManager.isAction(code, 'left') && gs.lane > 0) {
     gs.lane--;
   }
-  if ((code === 'ArrowRight' || code === 'KeyD') && gs.lane < LANES - 1) {
+  if (SettingsManager.isAction(code, 'right') && gs.lane < LANES - 1) {
     gs.lane++;
   }
-  if ((code === 'Space' || code === 'ArrowUp') && !gs.jumping && !gs.sliding) {
+  if (SettingsManager.isAction(code, 'jump') && !gs.jumping && !gs.sliding) {
     gs.jumping = true;
     gs.jumpStart = performance.now();
   }
-  if (code === 'ArrowDown' && !gs.sliding && !gs.jumping) {
+  if (SettingsManager.isAction(code, 'slide') && !gs.sliding && !gs.jumping) {
     gs.sliding = true;
     gs.slideStart = performance.now();
   }
@@ -281,11 +423,11 @@ canvas.addEventListener('touchend', e => {
   const dy = e.changedTouches[0].clientY - touchStartY;
   const threshold = 30;
   if (Math.abs(dx) > Math.abs(dy)) {
-    if (dx < -threshold) handleInput('ArrowLeft');
-    if (dx > threshold) handleInput('ArrowRight');
+    if (dx < -threshold) handleInput(SettingsManager.data.keys.left[0]);
+    if (dx > threshold) handleInput(SettingsManager.data.keys.right[0]);
   } else {
-    if (dy < -threshold) handleInput('Space');
-    if (dy > threshold) handleInput('ArrowDown');
+    if (dy < -threshold) handleInput(SettingsManager.data.keys.jump[0]);
+    if (dy > threshold) handleInput(SettingsManager.data.keys.slide[0]);
   }
 }, { passive: true });
 
@@ -663,7 +805,7 @@ function drawPopups(gs) {
 
 // 게임 루프
 function gameLoop(timestamp) {
-  if (!gameState || !gameState.running) return;
+  if (!gameState || !gameState.running || gameState.paused) return;
 
   const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
   lastTime = timestamp;

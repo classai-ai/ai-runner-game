@@ -7,6 +7,8 @@ const AudioManager = {
   unlocked: false,
   bgmVolume: 0.35,
   sfxVolume: 0.6,
+  bgmEnabled: true,
+  sfxEnabled: true,
   currentBgm: null,
 
   tracks: {
@@ -25,9 +27,9 @@ const AudioManager = {
       audio.preload = 'auto';
       if (key.startsWith('bgm')) {
         audio.loop = true;
-        audio.volume = this.bgmVolume;
+        audio.volume = this.bgmEnabled ? this.bgmVolume : 0;
       } else {
-        audio.volume = this.sfxVolume;
+        audio.volume = this.sfxEnabled ? this.sfxVolume : 0;
       }
       this._cache[key] = audio;
     }
@@ -43,10 +45,26 @@ const AudioManager = {
     });
   },
 
+  updateVolumes() {
+    Object.keys(this.tracks).forEach(k => {
+      const a = this._cache[k];
+      if (!a) return;
+      if (k.startsWith('bgm')) {
+        a.volume = this.bgmEnabled ? this.bgmVolume : 0;
+      } else {
+        a.volume = this.sfxEnabled ? this.sfxVolume : 0;
+      }
+    });
+  },
+
   playBgm(key) {
-    if (!this.unlocked) return;
+    if (!this.unlocked || !this.bgmEnabled) {
+      this.stopBgm();
+      return;
+    }
     if (this.currentBgm === key) {
       const playing = this._get(key);
+      playing.volume = this.bgmVolume;
       if (playing.paused) playing.play().catch(() => {});
       return;
     }
@@ -73,7 +91,7 @@ const AudioManager = {
   },
 
   playSfx(key) {
-    if (!this.unlocked) return;
+    if (!this.unlocked || !this.sfxEnabled) return;
     const src = this._get(key);
     const sfx = src.cloneNode();
     sfx.volume = this.sfxVolume;
@@ -83,7 +101,7 @@ const AudioManager = {
   forScreen(screenName) {
     if (screenName === 'game') {
       this.playBgm('bgmGame');
-    } else if (['menu', 'select', 'howto', 'over'].includes(screenName)) {
+    } else if (['menu', 'select', 'settings', 'over'].includes(screenName)) {
       this.playBgm('bgmLobby');
     }
   },

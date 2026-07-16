@@ -15,7 +15,7 @@
       <p class="game-subtitle">Escape from Virus</p>
       <div class="menu-buttons">
         <button class="btn btn-primary" id="btn-start">▶ 게임 시작</button>
-        <button class="btn btn-secondary" id="btn-howto">조작법</button>
+        <button class="btn btn-secondary" id="btn-settings-menu">⚙ 설정</button>
       </div>
       <p class="high-score-label">최고 기록: <span id="menu-high-score">0</span></p>
     </div>
@@ -43,25 +43,72 @@
       </div>
     </div>
 
-    <!-- 조작법 -->
-    <div id="screen-howto" class="screen">
-      <h2>조작법</h2>
-      <div class="howto-content">
-        <div class="howto-item"><kbd>←</kbd> <kbd>→</kbd> 또는 <kbd>A</kbd> <kbd>D</kbd> — 레인 이동</div>
-        <div class="howto-item"><kbd>Space</kbd> 또는 <kbd>↑</kbd> — 점프</div>
-        <div class="howto-item"><kbd>↓</kbd> — 슬라이딩 (낮은 장애물 회피)</div>
-        <div class="howto-item">모바일 — 좌우/상하 스와이프</div>
-        <hr>
-        <div class="howto-item">🦠 바이러스 충돌 → ❤️ -1 (무적 1초)</div>
-        <div class="howto-item">💉 백신 획득 → ❤️ +1 (최대 5)</div>
-        <div class="howto-item">💾 데이터 칩 (하늘색) → +50점</div>
+    <!-- 설정 -->
+    <div id="screen-settings" class="screen">
+      <h2>설정</h2>
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="audio">소리</button>
+        <button class="settings-tab" data-tab="controls">조작</button>
       </div>
-      <button class="btn btn-primary" id="btn-howto-back">확인</button>
+
+      <div class="settings-panel active" id="panel-audio">
+        <div class="setting-row">
+          <label class="setting-label">
+            <span>배경음악</span>
+            <input type="checkbox" id="setting-bgm-enabled" checked>
+          </label>
+        </div>
+        <div class="setting-row">
+          <label for="setting-bgm-volume">BGM 볼륨</label>
+          <input type="range" id="setting-bgm-volume" min="0" max="100" value="35">
+          <span class="setting-value" id="setting-bgm-value">35%</span>
+        </div>
+        <div class="setting-row">
+          <label class="setting-label">
+            <span>효과음</span>
+            <input type="checkbox" id="setting-sfx-enabled" checked>
+          </label>
+        </div>
+        <div class="setting-row">
+          <label for="setting-sfx-volume">효과음 볼륨</label>
+          <input type="range" id="setting-sfx-volume" min="0" max="100" value="60">
+          <span class="setting-value" id="setting-sfx-value">60%</span>
+        </div>
+        <button class="btn btn-test-sfx" id="btn-test-sfx">효과음 테스트</button>
+      </div>
+
+      <div class="settings-panel" id="panel-controls">
+        <div class="setting-row key-row">
+          <span class="key-action">왼쪽 이동</span>
+          <kbd class="key-display" id="key-display-left"></kbd>
+          <button class="btn btn-key-bind" data-action="left">변경</button>
+        </div>
+        <div class="setting-row key-row">
+          <span class="key-action">오른쪽 이동</span>
+          <kbd class="key-display" id="key-display-right"></kbd>
+          <button class="btn btn-key-bind" data-action="right">변경</button>
+        </div>
+        <div class="setting-row key-row">
+          <span class="key-action">점프</span>
+          <kbd class="key-display" id="key-display-jump"></kbd>
+          <button class="btn btn-key-bind" data-action="jump">변경</button>
+        </div>
+        <div class="setting-row key-row">
+          <span class="key-action">슬라이딩</span>
+          <kbd class="key-display" id="key-display-slide"></kbd>
+          <button class="btn btn-key-bind" data-action="slide">변경</button>
+        </div>
+        <p class="key-hint" id="key-bind-hint">모바일: 좌우/상하 스와이프로 조작</p>
+        <button class="btn btn-secondary btn-reset-keys" id="btn-reset-keys">기본값으로 초기화</button>
+      </div>
+
+      <button class="btn btn-primary" id="btn-settings-back">돌아가기</button>
     </div>
 
     <!-- 게임 화면 -->
     <div id="screen-game" class="screen">
       <canvas id="game-canvas"></canvas>
+      <button id="btn-settings-game" class="btn-settings-gear" aria-label="설정">⚙</button>
       <div id="hud">
         <div class="hud-row">
           <span class="hud-label">점수</span>
@@ -92,6 +139,7 @@
   </div>
 
   <script src="audio.js"></script>
+  <script src="settings.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
