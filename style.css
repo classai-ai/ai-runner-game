@@ -192,13 +192,53 @@ body {
 .char-card p {
   font-size: 0.75rem;
   color: #6eb8d4;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+.char-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.char-stat {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.stat-hp {
+  background: rgba(255, 70, 100, 0.15);
+  color: #ff8fa8;
+  border: 1px solid rgba(255, 100, 130, 0.25);
+}
+
+.stat-hit.stat-small {
+  background: rgba(0, 255, 180, 0.1);
+  color: #5dffb8;
+  border: 1px solid rgba(0, 255, 180, 0.25);
+}
+
+.stat-hit.stat-wide {
+  background: rgba(255, 120, 90, 0.12);
+  color: #ffaa88;
+  border: 1px solid rgba(255, 120, 90, 0.28);
 }
 
 .char-desc {
   font-size: 0.7rem;
   color: #4a7a94;
   display: block;
+}
+
+.select-hint {
+  font-size: 0.72rem;
+  color: #4a7a94;
+  margin: -16px 0 20px;
+  text-align: center;
 }
 
 .select-buttons {

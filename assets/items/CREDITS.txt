@@ -1,0 +1,20 @@
+Item sprite credits (free / open licenses)
+
+virus_red.png, virus_pink.png, virus_green.png
+  Source: OpenGameArt.org - "Virus, various colors" by TeeKay
+  License: CC0
+
+virus_tall.png
+  Source: OpenGameArt.org - "A coronavirus"
+  License: CC0
+
+vaccine.png (from pill_32x32.png)
+  Source: OpenGameArt.org - "32px Medical Items" by Airos (OpenClipArt, CC0)
+  License: CC0
+
+data_coin.png
+  Source: OpenGameArt.org - "FANTASY-coin-set" by Melissa Krautheim (MELLE)
+  License: CC0
+
+Unused extras in this folder (bandage, first_aid_kit, medical_mask, etc.)
+  are from the same "32px Medical Items" pack.

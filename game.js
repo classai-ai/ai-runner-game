@@ -4,7 +4,6 @@
 // ==========================================
 
 const LANES = 3;
-const MAX_LIVES = 5;
 const INVINCIBLE_MS = 1000;
 const JUMP_DURATION = 500;
 const SLIDE_DURATION = 450;
@@ -12,6 +11,25 @@ const HEAL_DURATION = 800;
 const HEAL_FRAME_MS = 200;
 const RUN_FRAME_MS = 100;
 const HIT_FRAME_MS = 120;
+
+const CHAR_TRAITS = {
+  ppiya: {
+    maxLives: 3,
+    sizeScale: 1.0,
+    hitboxHScale: 0.72,
+    label: '세로 피격: 작음',
+  },
+  oru: {
+    maxLives: 5,
+    sizeScale: 1.18,
+    hitboxHScale: 1.38,
+    label: '세로 피격: 넓음',
+  },
+};
+
+function getMaxLives(char) {
+  return CHAR_TRAITS[char].maxLives;
+}
 
 // 화면 전환
 const screens = {
@@ -269,7 +287,39 @@ function loadImage(src) {
   return img;
 }
 
-loadSprites().then(() => startSelectPreview());
+// 아이템/장애물 스프라이트
+const ENTITY_SPRITE_PATHS = {
+  virus: 'assets/items/virus_red.png',
+  tall_virus: 'assets/items/virus_tall.png',
+  float_virus: 'assets/items/virus_pink.png',
+  vaccine: 'assets/items/vaccine.png',
+  data: 'assets/items/data_coin.png',
+};
+
+const ENTITY_RENDER = {
+  virus:       { w: 0.52, h: 0.52, glow: '#ff4466', bob: false },
+  tall_virus:  { w: 0.68, h: 0.88, glow: '#ff2255', bob: false },
+  float_virus: { w: 0.56, h: 0.40, glow: '#dd66ff', bob: true },
+  vaccine:     { w: 0.44, h: 0.48, glow: '#00ff99', bob: true },
+  data:        { w: 0.46, h: 0.46, glow: '#ffd700', bob: true },
+};
+
+const entitySprites = {};
+let entitySpritesReady = false;
+
+function loadEntitySprites() {
+  const promises = Object.entries(ENTITY_SPRITE_PATHS).map(([type, src]) => {
+    const img = loadImage(src);
+    entitySprites[type] = img;
+    return new Promise(res => {
+      if (img.complete) res();
+      else { img.onload = res; img.onerror = res; }
+    });
+  });
+  return Promise.all(promises).then(() => { entitySpritesReady = true; });
+}
+
+Promise.all([loadSprites(), loadEntitySprites()]).then(() => startSelectPreview());
 
 // 공통 스프라이트 그리기
 function drawSprite(targetCtx, img, cx, cy, height, bobY = 0, alpha = 1) {
@@ -307,7 +357,11 @@ function drawSelectPreview(timestamp) {
     const { bob } = getSelectAnim(isSelected, timestamp);
 
     cctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawSprite(cctx, sprites[char].front, canvas.width / 2, canvas.height * 0.62, canvas.height * 0.72, bob);
+    const drawH = canvas.height * 0.72 * CHAR_TRAITS[char].sizeScale;
+    const cx = canvas.width / 2;
+    const cy = canvas.height * 0.62;
+    drawSprite(cctx, sprites[char].front, cx, cy, drawH, bob);
+    drawHitboxPreview(cctx, char, cx, cy, drawH);
   });
 
   selectAnimId = requestAnimationFrame(drawSelectPreview);
@@ -323,6 +377,20 @@ function stopSelectPreview() {
     cancelAnimationFrame(selectAnimId);
     selectAnimId = null;
   }
+}
+
+function drawHitboxPreview(cctx, char, cx, cy, drawH) {
+  const hScale = CHAR_TRAITS[char].hitboxHScale;
+  const w = drawH * 0.7;
+  const h = drawH * hScale;
+  cctx.save();
+  cctx.strokeStyle = char === 'ppiya' ? 'rgba(0, 255, 180, 0.75)' : 'rgba(255, 90, 110, 0.75)';
+  cctx.fillStyle = char === 'ppiya' ? 'rgba(0, 255, 180, 0.12)' : 'rgba(255, 90, 110, 0.12)';
+  cctx.setLineDash([5, 4]);
+  cctx.lineWidth = 2;
+  cctx.fillRect(cx - w / 2, cy - h / 2, w, h);
+  cctx.strokeRect(cx - w / 2, cy - h / 2, w, h);
+  cctx.restore();
 }
 
 // Canvas
@@ -351,9 +419,11 @@ const TYPES = {
 };
 
 function createGameState() {
+  const maxLives = getMaxLives(selectedChar);
   return {
     lane: 1,
-    lives: MAX_LIVES,
+    lives: maxLives,
+    maxLives,
     score: 0,
     distance: 0,
     combo: 0,
@@ -460,7 +530,7 @@ function spawnEntity(gs) {
 
 // 충돌 판정
 function getCharacterBounds(gs, laneW, playerY) {
-  const size = laneW * 0.78;
+  const size = laneW * 0.78 * CHAR_TRAITS[gs.char].sizeScale;
   const jumpProgress = gs.jumping
     ? Math.min(1, (performance.now() - gs.jumpStart) / JUMP_DURATION)
     : 0;
@@ -479,25 +549,26 @@ function getCharacterBounds(gs, laneW, playerY) {
 }
 
 function getEntityHitbox(ent, laneW, playerY) {
-  const x = ent.lane * laneW + laneW * 0.25;
-  const w = laneW * 0.5;
-
-  switch (ent.type) {
-    case TYPES.TALL_VIRUS:
-      return { x: x + 4, y: ent.y, w: w - 8, h: 65 };
-    case TYPES.FLOAT_VIRUS:
-      return { x, y: playerY - 50, w, h: 35 };
-    case TYPES.VACCINE:
-      return { x: x - 4, y: ent.y, w: w + 8, h: 55 };
-    case TYPES.DATA:
-      return { x: x - 6, y: ent.y, w: w + 12, h: 48 };
-    default:
-      return { x, y: ent.y, w, h: 50 };
-  }
+  const cfg = ENTITY_RENDER[ent.type] || ENTITY_RENDER.virus;
+  const cx = ent.lane * laneW + laneW / 2;
+  const w = laneW * cfg.w * 0.82;
+  const h = laneW * cfg.h * 0.88;
+  let y = ent.y;
+  if (ent.type === TYPES.FLOAT_VIRUS) y = playerY - 50;
+  return { x: cx - w / 2, y, w, h };
 }
 
 function getPlayerHitbox(gs, laneW, playerY) {
-  return getCharacterBounds(gs, laneW, playerY);
+  const bounds = getCharacterBounds(gs, laneW, playerY);
+  const hScale = CHAR_TRAITS[gs.char].hitboxHScale;
+  const cy = bounds.y + bounds.h / 2;
+  const h = bounds.h * hScale;
+  return {
+    x: bounds.x,
+    y: cy - h / 2,
+    w: bounds.w,
+    h,
+  };
 }
 
 function rectsOverlap(a, b) {
@@ -538,7 +609,7 @@ function checkCollisions(gs, laneW, playerY) {
         endGame();
       }
     } else if (ent.type === TYPES.VACCINE) {
-      if (gs.lives < MAX_LIVES) gs.lives++;
+      if (gs.lives < gs.maxLives) gs.lives++;
       ent.collected = true;
       gs.combo++;
       gs.healAnimStart = now;
@@ -581,7 +652,7 @@ function updateHUD() {
   document.getElementById('hud-distance').textContent = Math.floor(gameState.distance) + 'm';
 
   const hearts = [];
-  for (let i = 0; i < MAX_LIVES; i++) {
+  for (let i = 0; i < gameState.maxLives; i++) {
     hearts.push(i < gameState.lives ? '❤️' : '♡');
   }
   document.getElementById('hud-lives').textContent = hearts.join('');
@@ -673,7 +744,7 @@ function drawCharacter(gs, laneW, playerY) {
 
   if (!img || !img.complete) return;
 
-  const size = laneW * 0.78;
+  const size = laneW * 0.78 * CHAR_TRAITS[gs.char].sizeScale;
   const jumpProgress = gs.jumping
     ? Math.min(1, (timestamp - gs.jumpStart) / JUMP_DURATION)
     : 0;
@@ -692,7 +763,26 @@ function drawCharacter(gs, laneW, playerY) {
   drawSprite(ctx, img, cx, cy, drawH, 0, alpha);
 }
 
-function drawEntity(ent, laneW, playerY) {
+function drawEntityImage(img, cx, topY, laneW, cfg, timestamp) {
+  if (!img || !img.complete || !img.naturalWidth) return false;
+
+  const w = laneW * cfg.w;
+  const h = laneW * cfg.h;
+  const bob = cfg.bob ? Math.sin(timestamp / 280) * 5 : 0;
+  const x = cx - w / 2;
+  const y = topY + bob;
+
+  ctx.save();
+  if (cfg.glow) {
+    ctx.shadowColor = cfg.glow;
+    ctx.shadowBlur = 16;
+  }
+  ctx.drawImage(img, x, y, w, h);
+  ctx.restore();
+  return true;
+}
+
+function drawEntityFallback(ent, laneW, playerY) {
   const x = ent.lane * laneW + laneW * 0.25;
   const w = laneW * 0.5;
 
@@ -700,92 +790,48 @@ function drawEntity(ent, laneW, playerY) {
     case TYPES.VIRUS: {
       const y = ent.y;
       ctx.fillStyle = '#ff2255';
-      ctx.shadowColor = '#ff0044';
-      ctx.shadowBlur = 12;
-      // 스파이크 바이러스
       ctx.beginPath();
       ctx.arc(x + w / 2, y + 25, 22, 0, Math.PI * 2);
       ctx.fill();
-      for (let i = 0; i < 8; i++) {
-        const angle = (i / 8) * Math.PI * 2;
-        ctx.beginPath();
-        ctx.moveTo(x + w / 2 + Math.cos(angle) * 18, y + 25 + Math.sin(angle) * 18);
-        ctx.lineTo(x + w / 2 + Math.cos(angle) * 30, y + 25 + Math.sin(angle) * 30);
-        ctx.strokeStyle = '#ff4477';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-      }
-      ctx.shadowBlur = 0;
       break;
     }
     case TYPES.TALL_VIRUS: {
-      const y = ent.y;
       ctx.fillStyle = '#cc0044';
-      ctx.shadowColor = '#ff0044';
-      ctx.shadowBlur = 15;
-      ctx.fillRect(x + 8, y, w - 16, 65);
-      ctx.beginPath();
-      ctx.arc(x + w / 2, y, 18, Math.PI, 0);
-      ctx.fill();
-      // 눈
-      ctx.fillStyle = '#ffff00';
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(x + w / 2 - 10, y + 20, 5, 0, Math.PI * 2);
-      ctx.arc(x + w / 2 + 10, y + 20, 5, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(x + 8, ent.y, w - 16, 65);
       break;
     }
     case TYPES.FLOAT_VIRUS: {
       const y = playerY - 35;
       ctx.fillStyle = '#aa22ff';
-      ctx.shadowColor = '#cc44ff';
-      ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.ellipse(x + w / 2, y + 15, 28, 18, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.shadowBlur = 0;
       break;
     }
     case TYPES.VACCINE: {
-      const y = ent.y;
       ctx.fillStyle = '#00ff88';
-      ctx.shadowColor = '#00ff88';
-      ctx.shadowBlur = 14;
-      // 십자가 백신
-      ctx.fillRect(x + w / 2 - 6, y + 5, 12, 35);
-      ctx.fillRect(x + w / 2 - 16, y + 14, 32, 12);
-      ctx.shadowBlur = 0;
-      // 라벨
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('💉', x + w / 2, y + 50);
+      ctx.fillRect(x + w / 2 - 6, ent.y + 5, 12, 35);
+      ctx.fillRect(x + w / 2 - 16, ent.y + 14, 32, 12);
       break;
     }
     case TYPES.DATA: {
-      const y = ent.y;
       ctx.fillStyle = '#00d4ff';
-      ctx.shadowColor = '#00d4ff';
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.moveTo(x + w / 2, y + 5);
-      ctx.lineTo(x + w - 5, y + 22);
-      ctx.lineTo(x + w - 5, y + 42);
-      ctx.lineTo(x + 5, y + 42);
-      ctx.lineTo(x + 5, y + 22);
-      ctx.closePath();
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('DATA', x + w / 2, y + 32);
-      ctx.font = 'bold 8px monospace';
-      ctx.fillStyle = '#003344';
-      ctx.fillText('+50', x + w / 2, y + 44);
+      ctx.fillRect(x + 5, ent.y + 10, w - 10, 32);
       break;
     }
+  }
+}
+
+function drawEntity(ent, laneW, playerY) {
+  const cx = ent.lane * laneW + laneW / 2;
+  const timestamp = performance.now();
+  const cfg = ENTITY_RENDER[ent.type] || ENTITY_RENDER.virus;
+  const img = entitySprites[ent.type];
+  let topY = ent.y;
+  if (ent.type === TYPES.FLOAT_VIRUS) topY = playerY - 50;
+
+  if (!entitySpritesReady || !drawEntityImage(img, cx, topY, laneW, cfg, timestamp)) {
+    drawEntityFallback(ent, laneW, playerY);
   }
 }
 
